@@ -124,5 +124,15 @@ def setup_test_data(mongo_db):
     colecao = mongo_db["segmentos_mt_tabular"]
     
     registro = colecao.find_one({"job_id": {"$exists": True}}, {"job_id": 1})
+
+    if not registro:
+        test_job_id = "test-job-123"
+        colecao.insert_one({
+            "job_id": test_job_id,
+            "cod_id": "123",
+            "dist": "Teste",
+            "perdas_m_total": 0.5
+        })
+        return test_job_id
         
     return registro["job_id"]
