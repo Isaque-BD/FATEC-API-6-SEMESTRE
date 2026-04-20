@@ -7,7 +7,7 @@ from sqlalchemy.pool import NullPool
 from testcontainers.postgres import PostgresContainer
 
 from backend.app import app
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from backend.database import get_session
 from backend.security import get_password_hash
@@ -104,21 +104,22 @@ async def token(client, user):
     return response.json()['access_token']
 
 
-@pytest.fixture(scope="session")
-def mongo_db():
+@pytest_asyncio.fixture
+async def mongo_db():
     host = os.getenv("MONGO_HOST", "127.0.0.1")
     user = os.getenv("MONGO_ROOT_USER", "root")
     pw = os.getenv("MONGO_ROOT_PASSWORD", "1234")
+    db_name = os.getenv("MONGO_DB", "fatec_api")
     uri = f"mongodb://{user}:{pw}@{host}:27017/?authSource=admin"
-    client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-    yield client["fatec_api"]
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+    yield client[db_name]
     client.close()
 
 
-@pytest.fixture
-def setup_test_data(mongo_db):
+@pytest_asyncio.fixture
+async def setup_test_data(mongo_db):
     colecao = mongo_db["segmentos_mt_tabular"]
-    registro = colecao.find_one({"job_id": {"$exists": True}})
+    registro = await colecao.find_one({"job_id": {"$exists": True}})
     
     if not registro:
         test_job_id = "test-job-123"
@@ -132,3 +133,9 @@ def setup_test_data(mongo_db):
         return test_job_id
         
     return registro["job_id"]
+
+@pytest_asyncio.fixture
+async def api_response(client, setup_test_data):
+
+    response = await client.get(f"/tam/{setup_test_data}")
+    return response

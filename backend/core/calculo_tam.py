@@ -1,12 +1,11 @@
 from collections import defaultdict
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def _to_float(value: any) -> Optional[float]:
+def _to_float(value: Any) -> Optional[float]:
     """Converte valor para float de forma segura."""
     if value is None:
         return None
@@ -16,7 +15,7 @@ def _to_float(value: any) -> Optional[float]:
         return None
 
 
-def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dict]]:
+async def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dict]]:
     """
     Constrói as tabelas TAM (Trechos, Ranking por Conjunto, Top 10)
     usando dados reais do MongoDB, simulando o JOIN do pandas/geopandas.
@@ -26,13 +25,12 @@ def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dict]]:
         {"job_id": job_id},
         {"_id": 0, "COD_ID": 1, "DIST": 1, "CTMT": 1, "CONJ": 1, "COMP": 1}
     )
-    ssdmt_rows = list(ssdmt_cursor)
     
-    if not ssdmt_rows:
-        raise ValueError(f"Nenhum dado encontrado em segmentos_mt_tabular para job_id='{job_id}'")
-    
-    ctmt_doc = db.circuitos_mt.find_one({"job_id": job_id})
-    
+    ctmt_doc = await db.circuitos_mt.find_one(
+        {"job_id": job_id},
+        {"_id": 0, "records.COD_ID": 1, "records.NOME": 1}
+    )
+
     mapping_cod_id_to_nome: Dict[str, str] = {}
     
     if ctmt_doc and 'records' in ctmt_doc:
@@ -52,7 +50,7 @@ def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dict]]:
             {"_id": 0, "COD_ID": 1, "NOME": 1}
         )
         
-        for ctmt in ctmt_cursor:
+        async for ctmt in ctmt_cursor:
             cod_id = ctmt.get("COD_ID")
             nome = ctmt.get("NOME")
             
@@ -69,10 +67,7 @@ def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dict]]:
 
     soma_por_trecho: Dict[Tuple, float] = defaultdict(float)
     
-    registros_sem_match = 0
-    registros_com_match = 0
-    
-    for row in ssdmt_rows:
+    async for row in ssdmt_cursor:
         cod_id = row.get("COD_ID")
         dist = row.get("DIST")
         conj = row.get("CONJ")
@@ -88,10 +83,7 @@ def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dict]]:
         nome = mapping_cod_id_to_nome.get(ctmt_str)
         
         if nome is None:
-            registros_sem_match += 1
             nome = ctmt_str if ctmt_str else "SEM_NOME"
-        else:
-            registros_com_match += 1
         
         comp_km = comp / 1000.0
 
@@ -105,7 +97,7 @@ def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dict]]:
             "CONJ": conj,
             "CTMT": ctmt,
             "NOME": nome,
-            "COMP_KM": round(comp_km, 6) 
+            "COMP_KM": comp_km 
         }
         for (dist, conj, ctmt, nome), comp_km in soma_por_trecho.items()
     ]

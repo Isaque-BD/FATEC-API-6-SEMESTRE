@@ -1,30 +1,37 @@
 from fastapi import APIRouter, Depends, HTTPException
 import os
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 from ..core.calculo_tam import calculo_tam
 
-# 4d6eefb1-a550-4371-b059-17b1157a6375
-# 802e323f-3a26-4473-bb78-ba843a5dab88
 
 router = APIRouter()
 
-def get_db():
-    user = os.getenv("MONGO_ROOT_USER", "root")
-    pw = os.getenv("MONGO_ROOT_PASSWORD", "1234")
-    host = os.getenv("MONGO_HOST", "mongodb")
-    db_name = os.getenv("MONGO_DB", "fatec_api")
+async def get_db():
     
-    uri = f"mongodb://{user}:{pw}@{host}:27017/?authSource=admin"
+    uri = os.getenv("MONGO_URI")
+    db_name = os.getenv("MONGO_DB")
     
-    client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-    return client[db_name]
+    if not uri:
+        raise HTTPException(status_code=500, detail="Configuração ausente: MONGO_URI")
+    if not db_name:
+        raise HTTPException(status_code=500, detail="Configuração ausente: MONGO_DB")
+
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+    
+    try:
+        yield client[db_name]
+    finally:
+        client.close()
 
 @router.get('/tam/{job_id}')
 async def get_json_tam(job_id: str, db=Depends(get_db)):
 
     try:
 
-        calculo_trechos, ranking_conjunto, top_10_conjunto = calculo_tam(db, job_id) 
+        calculo_trechos, ranking_conjunto, top_10_conjunto = await calculo_tam(db, job_id) 
+
+        if not calculo_trechos:
+            raise ValueError("Job inexistente ou sem dados")
 
         return {
             "status": "success",

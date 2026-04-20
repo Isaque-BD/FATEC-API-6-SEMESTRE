@@ -2,14 +2,6 @@ import pytest
 
 COLECAO_ALVO = "segmentos_mt_tabular"
 
-@pytest.fixture
-async def api_response(client, setup_test_data):
-    """
-    Removido o scope='module' para evitar o ScopeMismatch.
-    O Pytest agora permite que ela acesse o 'client'.
-    """
-    response = await client.get(f"/tam/{setup_test_data}")
-    return response
 
 @pytest.mark.asyncio
 async def test_get_tam_200_sucesso(api_response):
@@ -19,7 +11,7 @@ async def test_get_tam_200_sucesso(api_response):
 @pytest.mark.asyncio
 async def test_get_tam_nomes_corretos(mongo_db, setup_test_data, api_response):
     colecao = mongo_db[COLECAO_ALVO]
-    amostra = colecao.find_one({"job_id": setup_test_data})
+    amostra = await colecao.find_one({"job_id": setup_test_data})
     assert amostra is not None
     ctmt_alvo = amostra["CTMT"]
     
@@ -43,14 +35,14 @@ async def test_get_tam_estrutura_resposta(api_response, setup_test_data):
 @pytest.mark.asyncio
 async def test_get_tam_calculo_comp_km(mongo_db, setup_test_data, api_response):
     colecao = mongo_db[COLECAO_ALVO]
-    amostra = colecao.find_one({"job_id": setup_test_data})
+    amostra = await colecao.find_one({"job_id": setup_test_data})
     ctmt_alvo = amostra["CTMT"]
     
     pipeline = [
         {"$match": {"job_id": setup_test_data, "CTMT": ctmt_alvo}},
         {"$group": {"_id": "$CTMT", "total_metros": {"$sum": "$COMP"}}}
     ]
-    resultado_banco = list(colecao.aggregate(pipeline))
+    resultado_banco = await colecao.aggregate(pipeline).to_list(length=None)
     esperado_km = resultado_banco[0]["total_metros"] / 1000
 
     dados_api = api_response.json()["data"]["trechos"]
