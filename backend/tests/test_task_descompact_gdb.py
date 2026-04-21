@@ -148,7 +148,7 @@ class TestDescompactGdbSuccess:
         mock_chord.assert_called_once()
         mock_chord_instance.delay.assert_called_once()
 
-    def test_chord_header_tem_tres_tasks(self, tmp_dir, valid_zip):
+    def test_chord_header_tem_quatro_tasks(self, tmp_dir, valid_zip):
         with (
             patch(
                 f'{TASK_MODULE}.fiona.listlayers', return_value=_fiona_layers()

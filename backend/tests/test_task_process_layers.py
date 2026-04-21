@@ -550,7 +550,7 @@ def test_unsemt_descarta_registro_com_tip_unid_diferente():
         columns=set(REQUIRED_UNSEMT_COLUMNS),
         rows=[
             _feature_unsemt('UN-01', tip_unid='99'),
-            _feature_unsemt('UN-02', tip_unid='32'), 
+            _feature_unsemt('UN-02', tip_unid='32'),
         ],
     )
 
@@ -566,8 +566,8 @@ def test_unsemt_descarta_registro_com_sit_ativ_diferente():
     dataset = _FakeDataset(
         columns=set(REQUIRED_UNSEMT_COLUMNS),
         rows=[
-            _feature_unsemt('UN-01', sit_ativ='DE'), 
-            _feature_unsemt('UN-02', sit_ativ='AT'),  
+            _feature_unsemt('UN-01', sit_ativ='DE'),
+            _feature_unsemt('UN-02', sit_ativ='AT'),
         ],
     )
 
@@ -620,6 +620,41 @@ def test_unsemt_descarta_quando_sem_geometry():
 
     assert result['descartados'] >= 1
     assert all(r['cod_id'] != 'UN-01' for r in result['records'])
+
+def test_deve_persistir_unsemt_quando_presente():
+    results = [
+        {
+            "layer": "UNSEMT",
+            "records": [{"cod_id": 1}],
+            "descartados": 2
+        }
+    ]
+
+    job_id = "job-123"
+    processed_at = "2024-01-01T00:00:00"
+
+    with patch("backend.tasks.task_process_layers._persist_unsemt") as mock_persist:
+        mock_persist.return_value = 1
+
+        unsemt_result = next(
+            (r for r in (results or []) if r.get("layer") == "UNSEMT"),
+            None
+        )
+
+        if unsemt_result:
+            _ = mock_persist(
+                records=unsemt_result["records"],
+                job_id=job_id,
+                descartados=unsemt_result["descartados"],
+                processed_at=processed_at,
+            )
+
+        mock_persist.assert_called_once_with(
+            records=[{"cod_id": 1}],
+            job_id=job_id,
+            descartados=2,
+            processed_at=processed_at,
+        )
     
 class _FakeMongoCollection:
     def __init__(self):

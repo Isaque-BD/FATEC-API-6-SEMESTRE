@@ -222,6 +222,8 @@ def _persist_unsemt(records: list[dict], job_id: str, descartados: int, processe
     col.create_index([('job_id', 1)], background=True)
     col.create_index([('job_id', 1), ('cod_id', 1)], unique=True, background=True)
     col.create_index([('job_id', 1), ('conj', 1)], background=True)
+    
+    col.delete_many({'job_id': job_id})
 
     docs = []
     for r in records:
@@ -289,7 +291,7 @@ REQUIRED_CTMT_COLUMNS: set[str] = {
     'PNTBT_12',
 }
 
-REQUIRED_UNSEMT_COLUMNS: set[str] = {'COD_ID','CONJ','TIP_UNID','SIT_ATIV'}
+REQUIRED_UNSEMT_COLUMNS: set[str] = {'COD_ID', 'CONJ', 'TIP_UNID', 'SIT_ATIV'}
 REQUIRED_CONJ_COLUMNS: set[str] = {'COD_ID', 'NOME', 'DIST'}
 REQUIRED_SSDMT_COLUMNS: set[str] = {'COD_ID', 'CTMT', 'CONJ', 'COMP', 'DIST'}
 SSDMT_BATCH_SIZE = int(os.getenv('SSDMT_BATCH_SIZE', '10000'))
@@ -726,7 +728,7 @@ def task_processar_conj(job_id: str, gdb_path: str) -> dict:
         'total': len(records),
         'descartados': descartados,
     }
-    
+
 @celery_app.task(name='etl.processar_unsemt')
 def task_processar_unsemt(job_id: str, gdb_path: str) -> dict:
     logger.info(
@@ -916,7 +918,7 @@ def task_finalizar(
             _get_collection('circuitos_mt').delete_many({'job_id': job_id})
         except Exception:
             pass
-        for collection_name in ('segmentos_mt_tabular', 'segmentos_mt_geo', 'conjuntos'):
+        for collection_name in ('segmentos_mt_tabular', 'segmentos_mt_geo', 'conjuntos', 'unsemt'):
             try:
                 _get_collection(collection_name).delete_many({'job_id': job_id})
             except Exception:
