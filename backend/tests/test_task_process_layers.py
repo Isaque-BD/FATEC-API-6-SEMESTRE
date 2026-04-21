@@ -611,8 +611,8 @@ def test_unsemt_descarta_quando_sem_geometry():
     dataset = _FakeDataset(
         columns=set(REQUIRED_UNSEMT_COLUMNS),
         rows=[
-            _feature_unsemt('UN-01', tip_unid='32', sit_ativ='AT', geometry=None),  
-            _feature_unsemt('UN-02', tip_unid='32', sit_ativ='AT'),                  
+            _feature_unsemt('UN-01', tip_unid='32', sit_ativ='AT', geometry=None),
+            _feature_unsemt('UN-02', tip_unid='32', sit_ativ='AT'),
         ],
     )
     with patch(f'{TASK_MODULE}.fiona.open', return_value=dataset):
