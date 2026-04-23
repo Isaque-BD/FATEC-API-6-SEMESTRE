@@ -1,5 +1,6 @@
 import uuid
 import os
+
 import factory
 import pytest
 import pytest_asyncio
@@ -108,11 +109,11 @@ async def token(client, user):
 
 @pytest_asyncio.fixture
 async def mongo_db():
-    host = os.getenv('MONGO_HOST', '127.0.0.1')
-    user = os.getenv('MONGO_ROOT_USER', 'root')
-    pw = os.getenv('MONGO_ROOT_PASSWORD', '1234')
-    db_name = os.getenv('MONGO_DB', 'fatec_api')
-    uri = f'mongodb://{user}:{pw}@{host}:27017/?authSource=admin'
+    host = os.getenv("MONGO_HOST", "127.0.0.1")
+    user = os.getenv("MONGO_ROOT_USER", "root")
+    pw = os.getenv("MONGO_ROOT_PASSWORD", "1234")
+    db_name = os.getenv("MONGO_DB", "fatec_api")
+    uri = f"mongodb://{user}:{pw}@{host}:27017/?authSource=admin"
     client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
     yield client[db_name]
     client.close()
