@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from httpx import AsyncClient
 
 from backend.core.models import Distribuidora
@@ -9,6 +10,10 @@ from backend.core.models import Distribuidora
 @pytest_asyncio.fixture
 async def sample_distribuidoras(session: AsyncSession):
     """Create sample distributors for testing"""
+    # Clean existing data first
+    await session.execute(text("DELETE FROM distribuidoras"))
+    await session.commit()
+    
     distributors = [
         Distribuidora(
             id="dist_001",
@@ -64,7 +69,7 @@ async def test_get_distributors_with_data(client: AsyncClient, sample_distribuid
 async def test_get_distributors_empty_table(client: AsyncClient, session: AsyncSession):
     """Test GET /distributors with empty table"""
     # Ensure table is empty
-    await session.execute("DELETE FROM distribuidoras")
+    await session.execute(text("DELETE FROM distribuidoras"))
     await session.commit()
     
     response = await client.get('/dist/distributors')
