@@ -142,6 +142,7 @@ async def api_response(client, setup_test_data):
     response = await client.get(f"/tam/{setup_test_data}")
     return response
 
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session):
     """
