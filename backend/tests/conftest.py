@@ -1,4 +1,5 @@
 import uuid
+import os
 
 import factory
 import pytest
@@ -10,7 +11,6 @@ from testcontainers.postgres import PostgresContainer
 
 from backend.app import app
 from motor.motor_asyncio import AsyncIOMotorClient
-import os
 from backend.database import get_session
 from backend.core import models as _models  # noqa: F401
 from backend.security import get_password_hash
@@ -121,22 +121,36 @@ async def mongo_db():
 
 @pytest_asyncio.fixture
 async def setup_test_data(mongo_db):
-    colecao = mongo_db["segmentos_mt_tabular"]
-    
-    test_job_id = "test-job-" + str(uuid.uuid4()) 
-    
+    colecao = mongo_db['segmentos_mt_tabular']
+
+    test_job_id = 'test-job-' + str(uuid.uuid4())
+
     await colecao.insert_one({
-        "job_id": test_job_id,
-        "CTMT": "ALIMENTADOR_TESTE",
-        "COMP": 1500.0,  
-        "CONJ": "999",
-        "DIST": "DIST_TESTE"
+        'job_id': test_job_id,
+        'CTMT': 'ALIMENTADOR_TESTE',
+        'COMP': 1500.0,
+        'CONJ': '999',
+        'DIST': 'DIST_TESTE',
     })
-    
+
     return test_job_id
+
 
 @pytest_asyncio.fixture
 async def api_response(client, setup_test_data):
 
     response = await client.get(f"/tam/{setup_test_data}")
     return response
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_sessionstart(session):
+    """
+    Executa antes da coleta dos testes. 
+    Define variáveis de ambiente mínimas para evitar erros de validação do Pydantic.
+    """
+    os.environ.setdefault("MAIL_USERNAME", "test_user")
+    os.environ.setdefault("MAIL_PASSWORD", "test_password")
+    os.environ.setdefault("MAIL_SERVER", "smtp.test.com")
+    os.environ.setdefault("MAIL_PORT", "587")
+    os.environ.setdefault("MAIL_FROM", "admin@test.com")

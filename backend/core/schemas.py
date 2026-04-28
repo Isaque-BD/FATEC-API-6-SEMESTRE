@@ -1,5 +1,3 @@
-from datetime import date
-
 from pydantic import BaseModel, ConfigDict, EmailStr, HttpUrl
 
 
@@ -39,7 +37,7 @@ class CriticidadeResponse(BaseModel):
 class DistribuidoraPayload(BaseModel):
     id: str | None
     dist_name: str
-    date_gdb: date | None
+    date_gdb: int | None
 
 
 class SyncDistribuidorasResponse(BaseModel):
@@ -54,3 +52,17 @@ class DownloadRequest(BaseModel):
 class DecFecRequest(BaseModel):
     url_realizado: HttpUrl
     url_limite: HttpUrl
+
+
+class PipelineTriggerRequest(BaseModel):
+    distribuidora_id: str
+    ano: int
+
+
+class PipelineTriggerResponse(BaseModel):
+    status: str
+    job_id: str
+    task_id: str
+    distribuidora_id: str
+    ano: int
+    download_url: str

@@ -23,6 +23,8 @@ dependencies = [
     "shapely>=2.1.2",
     "pandas>=3.0.2",
     "requests>=2.33.1",
+    "reportlab>=4.4.10",
+    "fastapi-mail>=1.6.2",
 ]
 
 [dependency-groups]
@@ -44,6 +46,9 @@ extend-exclude = ['migrations']
 [tool.ruff.lint]
 preview = true
 select = ['I', 'F', 'E', 'W', 'PL', 'PT']
+
+[tool.ruff.lint.per-file-ignores]
+'backend/tests/**/*.py' = ['PLR2004']
 
 [tool.ruff.format]
 preview = true
