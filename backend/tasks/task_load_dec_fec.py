@@ -28,7 +28,9 @@ def _ensure_index(collection, fields: list[str]) -> None:
     index_name = '_'.join(f for f in fields) + '_unique'
     existing = {idx['name'] for idx in collection.list_indexes()}
     if index_name not in existing:
-        collection.create_index(index_keys, unique=True, name=index_name, sparse=True)
+        collection.create_index(
+            index_keys, unique=True, name=index_name, sparse=True
+        )
 
 
 def _download_csv(url: str, dest: Path) -> None:
@@ -108,7 +110,13 @@ def task_load_dec_fec_realizado(self, job_id: str, url: str) -> dict:
         collection = _get_collection('dec_fec_realizado')
         _ensure_index(
             collection,
-            ['sig_agente', 'ide_conj', 'sig_indicador', 'ano_indice', 'num_periodo'],
+            [
+                'sig_agente',
+                'ide_conj',
+                'sig_indicador',
+                'ano_indice',
+                'num_periodo',
+            ],
         )
         total = 0
 
