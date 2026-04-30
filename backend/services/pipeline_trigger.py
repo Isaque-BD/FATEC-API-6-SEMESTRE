@@ -1,8 +1,9 @@
+import uuid
 from datetime import datetime, timezone
 
 import httpx
+
 from sqlalchemy import select, update
-from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.models import Distribuidora
@@ -10,11 +11,11 @@ from backend.services.criticidade import (
     calcular_score_criticidade,
     criar_mapa_criticidade,
 )
-from backend.services.etl_download import enqueue_download_gdb
 from backend.services.render_criticidade import (
     render_mapa_calor_criticidade,
     render_tabela_score_criticidade,
 )
+from backend.tasks.task_download_gdb import task_download_gdb
 
 ARCGIS_ITEM_URL = 'https://www.arcgis.com/sharing/rest/content/items/{item_id}'
 ARCGIS_DOWNLOAD_URL = (
@@ -23,19 +24,20 @@ ARCGIS_DOWNLOAD_URL = (
 ALLOWED_ITEM_TYPES = {'Feature Service', 'File Geodatabase'}
 
 
-async def _get_distribuidora_info(
+async def _get_distribuidora_name(
     session: AsyncSession,
     distribuidora_id: str,
     ano: int,
-) -> tuple[str, str | None]:
-    """Retorna (dist_name, job_id_atual) da distribuidora."""
-    stmt = select(Distribuidora.dist_name, Distribuidora.job_id).where(
+) -> str:
+    stmt = select(Distribuidora.dist_name).where(
         Distribuidora.id == distribuidora_id,
         Distribuidora.date_gdb == ano,
     )
     result = await session.execute(stmt)
-    row = result.one()
-    return row.dist_name, row.job_id
+    dist_name = result.scalar_one_or_none()
+    if not dist_name:
+        raise LookupError('Distribuidora não encontrada para o ano informado')
+    return dist_name
 
 
 async def distribuidora_job_already_triggered(
@@ -126,23 +128,22 @@ async def trigger_pipeline_flow(
             'Pipeline já foi acionada para a distribuidora no ano informado'
         )
 
-    try:
-        dist_name, current_job_id = await _get_distribuidora_info(
-            session, distribuidora_id, ano
-        )
-    except NoResultFound:
-        raise LookupError(
-            'Distribuidora não encontrada para o ano informado'
-        )
+    dist_name = await _get_distribuidora_name(
+        session,
+        distribuidora_id,
+        ano,
+    )
 
     download_url = await resolve_download_url_from_aneel(distribuidora_id)
-    enqueue_result = enqueue_download_gdb(download_url, distribuidora_id)
+    job_id = str(uuid.uuid4())
+
+    task = task_download_gdb.delay(job_id, download_url, distribuidora_id)
 
     await save_distribuidora_job_tracking(
         session=session,
         distribuidora_id=distribuidora_id,
         ano=ano,
-        job_id=enqueue_result['job_id'],
+        job_id=job_id,
     )
 
     await calcular_score_criticidade(ano=ano, distribuidora=dist_name)
@@ -151,7 +152,7 @@ async def trigger_pipeline_flow(
         distribuidora=dist_name,
         ano=ano,
         distribuidora_id=distribuidora_id,
-        job_id=current_job_id,
+        job_id=job_id,
     )
 
     await render_tabela_score_criticidade(
@@ -162,7 +163,9 @@ async def trigger_pipeline_flow(
     )
 
     return {
-        **enqueue_result,
+        'job_id': job_id,
+        'task_id': task.id,
+        'status': 'queued',
         'distribuidora_id': distribuidora_id,
         'ano': ano,
         'download_url': download_url,
