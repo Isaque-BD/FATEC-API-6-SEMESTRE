@@ -1,31 +1,20 @@
 import pytest
+from celery import chain as celery_chain
 from sqlalchemy import select
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call, patch
 
 from backend.core.models import Distribuidora
 
+_CHAIN_PATH = 'backend.services.pipeline_trigger.chain'
 
-def _mock_all_tasks(monkeypatch, download_task_mock):
-    """Mocka o download e as 4 tasks de criticidade/render no pipeline_trigger."""
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_download_gdb.delay',
-        download_task_mock,
-    )
-    noop = MagicMock()
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_score_criticidade.delay', noop
-    )
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_mapa_criticidade.delay', noop
-    )
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_render_tabela_score.delay', noop
-    )
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_render_mapa_calor.delay', noop
-    )
-    return noop
+
+def _mock_pipeline(monkeypatch, chain_result_id='task-1'):
+    """Mocka chain().delay() para evitar conexão com Redis."""
+    mock_chain = MagicMock()
+    mock_chain.return_value.delay.return_value = MagicMock(id=chain_result_id)
+    monkeypatch.setattr(_CHAIN_PATH, mock_chain)
+    return mock_chain
 
 
 @pytest.mark.asyncio
@@ -46,9 +35,7 @@ async def test_pipeline_trigger_retorna_202_quando_valido(
     async def fake_resolve(_distribuidora_id):
         return 'https://www.arcgis.com/sharing/rest/content/items/item-123/data'
 
-    fake_task = SimpleNamespace(id='task-1')
-    mock_download_delay = MagicMock(return_value=fake_task)
-    _mock_all_tasks(monkeypatch, mock_download_delay)
+    _mock_pipeline(monkeypatch, chain_result_id='task-1')
     monkeypatch.setattr(
         'backend.services.pipeline_trigger.resolve_download_url_from_aneel',
         fake_resolve,
@@ -71,8 +58,6 @@ async def test_pipeline_trigger_retorna_202_quando_valido(
     )
     assert 'job_id' in body
 
-    mock_download_delay.assert_called_once()
-
     persisted = (
         (
             await session.execute(
@@ -90,60 +75,56 @@ async def test_pipeline_trigger_retorna_202_quando_valido(
 
 
 @pytest.mark.asyncio
-async def test_pipeline_trigger_dispara_todas_as_tasks(
+async def test_pipeline_trigger_chain_contem_todas_as_tasks(
     client,
     session,
     monkeypatch,
 ):
-    """Verifica que as 5 tasks (download + criticidade + render) são enfileiradas."""
+    """O chain deve conter download + 4 tasks pós-ETL com .si() (imutável)."""
     session.add(
-        Distribuidora(id='item-all-tasks', date_gdb=2026, dist_name='DIST ALL')
+        Distribuidora(id='item-chain', date_gdb=2026, dist_name='DIST CHAIN')
     )
     await session.commit()
 
     async def fake_resolve(_):
-        return 'https://www.arcgis.com/sharing/rest/content/items/item-all-tasks/data'
+        return 'https://www.arcgis.com/sharing/rest/content/items/item-chain/data'
 
-    fake_task = SimpleNamespace(id='t-download')
-    mock_download = MagicMock(return_value=fake_task)
-    mock_score = MagicMock()
-    mock_mapa = MagicMock()
-    mock_tabela = MagicMock()
-    mock_calor = MagicMock()
-
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_download_gdb.delay', mock_download
-    )
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_score_criticidade.delay', mock_score
-    )
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_mapa_criticidade.delay', mock_mapa
-    )
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_render_tabela_score.delay', mock_tabela
-    )
-    monkeypatch.setattr(
-        'backend.services.pipeline_trigger.task_render_mapa_calor.delay', mock_calor
-    )
     monkeypatch.setattr(
         'backend.services.pipeline_trigger.resolve_download_url_from_aneel',
         fake_resolve,
     )
 
-    response = await client.post(
-        '/pipeline/trigger',
-        json={'distribuidora_id': 'item-all-tasks', 'ano': 2026},
-    )
+    with patch(_CHAIN_PATH) as mock_chain:
+        mock_chain.return_value.delay.return_value = MagicMock(id='chain-id')
+        response = await client.post(
+            '/pipeline/trigger',
+            json={'distribuidora_id': 'item-chain', 'ano': 2026},
+        )
 
     assert response.status_code == 202
     job_id = response.json()['job_id']
 
-    mock_download.assert_called_once()
-    mock_score.assert_called_once_with(job_id, 'DIST ALL', 2026)
-    mock_mapa.assert_called_once_with(job_id, 'item-all-tasks', 'DIST ALL', 2026)
-    mock_tabela.assert_called_once_with(job_id, 'DIST ALL', 2026)
-    mock_calor.assert_called_once_with(job_id, 'DIST ALL', 2026)
+    # chain foi chamado com exatamente 5 signatures (download + 4 pós-ETL)
+    mock_chain.assert_called_once()
+    sigs = mock_chain.call_args.args
+    assert len(sigs) == 5
+
+    assert sigs[0].task == 'etl.download_gdb'
+    assert sigs[0].args == (job_id, 'https://www.arcgis.com/sharing/rest/content/items/item-chain/data', 'item-chain')
+
+    assert sigs[1].task == 'etl.score_criticidade'
+    assert sigs[1].args == (job_id, 'DIST CHAIN', 2026)
+
+    assert sigs[2].task == 'etl.mapa_criticidade'
+    assert sigs[2].args == (job_id, 'item-chain', 'DIST CHAIN', 2026)
+
+    assert sigs[3].task == 'etl.render_tabela_score'
+    assert sigs[3].args == (job_id, 'DIST CHAIN', 2026)
+
+    assert sigs[4].task == 'etl.render_mapa_calor'
+    assert sigs[4].args == (job_id, 'DIST CHAIN', 2026)
+
+    mock_chain.return_value.delay.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 import asyncio
 
-from backend.services.criticidade import _col
+from backend.services.criticidade import get_mongo_collection
 from backend.services.render_criticidade import (
     render_mapa_calor_criticidade,
     render_tabela_score_criticidade,
@@ -13,7 +13,7 @@ JOB_ID = 'b7bd3177-2771-45fb-86c9-7a8de442c887'
 
 
 async def main() -> None:
-    await _col('mapa_criticidade').update_one(
+    await get_mongo_collection('mapa_criticidade').update_one(
         {'distribuidora': DISTRIBUIDORA, 'ano': ANO},
         {
             '$set': {
@@ -36,4 +36,5 @@ async def main() -> None:
     print(f'Mapa salvo em: {path_mapa}')
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(main())

@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
+from celery import chain
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,12 +135,13 @@ async def trigger_pipeline_flow(
     download_url = await resolve_download_url_from_aneel(distribuidora_id)
     job_id = str(uuid.uuid4())
 
-    task = task_download_gdb.delay(job_id, download_url, distribuidora_id)
-
-    task_score_criticidade.delay(job_id, dist_name, ano)
-    task_mapa_criticidade.delay(job_id, distribuidora_id, dist_name, ano)
-    task_render_tabela_score.delay(job_id, dist_name, ano)
-    task_render_mapa_calor.delay(job_id, dist_name, ano)
+    result = chain(
+        task_download_gdb.si(job_id, download_url, distribuidora_id),
+        task_score_criticidade.si(job_id, dist_name, ano),
+        task_mapa_criticidade.si(job_id, distribuidora_id, dist_name, ano),
+        task_render_tabela_score.si(job_id, dist_name, ano),
+        task_render_mapa_calor.si(job_id, dist_name, ano),
+    ).delay()
 
     await save_distribuidora_job_tracking(
         session=session,
@@ -150,7 +152,7 @@ async def trigger_pipeline_flow(
 
     return {
         'job_id': job_id,
-        'task_id': task.id,
+        'task_id': result.id,
         'status': 'queued',
         'distribuidora_id': distribuidora_id,
         'ano': ano,
