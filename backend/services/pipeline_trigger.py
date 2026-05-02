@@ -141,7 +141,7 @@ async def trigger_pipeline_flow(
         task_download_gdb.si(job_id, download_url, distribuidora_id),
         task_score_criticidade.si(job_id, dist_name, ano),
         task_calculate_pt_pnt.si(job_id, distribuidora_id),
-        task_calculate_sam.si(job_id, distribuidora_id, sig_agente=dist_name, ano_indice=ano),
+        task_calculate_sam.si(job_id, distribuidora_id, dist_name, ano),
         task_mapa_criticidade.si(job_id, distribuidora_id, dist_name, ano),
         task_render_tabela_score.si(job_id, dist_name, ano),
         task_render_mapa_calor.si(job_id, dist_name, ano),
