@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.models import Distribuidora
 from backend.tasks.task_calculate_pt_pnt import task_calculate_pt_pnt
+from backend.tasks.task_calculate_sam import task_calculate_sam
 from backend.tasks.task_criticidade import (
     task_mapa_criticidade,
     task_score_criticidade,
@@ -175,6 +176,7 @@ async def trigger_pipeline_flow(
         task_score_criticidade.si(job_id, dist_name, ano),
         task_calculate_pt_pnt.si(job_id, distribuidora_id, dist_name, ano),
         task_render_pt_pnt.si(job_id, distribuidora_id, dist_name, ano),
+        task_calculate_sam.si(job_id, distribuidora_id, dist_name, ano),
         task_mapa_criticidade.si(job_id, distribuidora_id, dist_name, ano),
         task_calcular_tam.si(job_id, {
             "id": distribuidora_id, 
